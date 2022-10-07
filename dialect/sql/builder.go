@@ -2951,7 +2951,7 @@ func (*WithBuilder) view() {}
 // only to query rows-limited edges in pagination.
 type WindowBuilder struct {
 	Builder
-	fn        string // e.g. ROW_NUMBER(), RANK().
+	s         *Selector
 	partition func(*Builder)
 	order     []any
 }
@@ -2960,7 +2960,16 @@ type WindowBuilder struct {
 // Using this function will assign a each row a number, from 1 to N, in the
 // order defined by the ORDER BY clause in the window spec.
 func RowNumber() *WindowBuilder {
-	return &WindowBuilder{fn: "ROW_NUMBER"}
+	return WindowSelector(Select("ROW_NUMBER()"))
+}
+
+// WindowSelector returns a new window clause with a custom selector allowing
+// for custom windown functions.
+//
+//	s1 := WindowSelector(SelectExpr(Expr("ROW_NUMBER()")))
+//	s2 := WindowSelector(Select("ROW_NUMBER()"))
+func WindowSelector(s *Selector) *WindowBuilder {
+	return &WindowBuilder{s: s}
 }
 
 // PartitionBy indicates to divide the query rows into groups by the given columns.
@@ -3000,8 +3009,8 @@ func (w *WindowBuilder) OrderExpr(exprs ...Querier) *WindowBuilder {
 
 // Query returns query representation of the window function.
 func (w *WindowBuilder) Query() (string, []any) {
-	w.WriteString(w.fn)
-	w.WriteString("() OVER ")
+	w.s.joinSelect(&w.Builder)
+	w.WriteString(" OVER ")
 	w.Wrap(func(b *Builder) {
 		if w.partition != nil {
 			b.WriteString("PARTITION BY ")
